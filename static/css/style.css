@@ -228,4 +228,14 @@ html {
     white-space: nowrap; /* Prevent name from wrapping */
     /* background-color will be set by JS to match user's cursor color */
     z-index: 6; /* Above the cursor bar itself */
+    transition: opacity 0.2s ease-in-out; /* Smooth transition for show/hide */
+}
+
+/* Local cursor specific styling */
+.local-cursor {
+    z-index: 10; /* Higher z-index for local cursor */
+}
+
+.local-cursor .remote-cursor-name {
+    font-weight: 500; /* Slightly bolder for local cursor */
 }

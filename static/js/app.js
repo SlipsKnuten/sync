@@ -35,6 +35,109 @@ document.addEventListener('DOMContentLoaded', function() {
     const fontSizeSelect = document.getElementById('fontSizeSelect'); 
 
     let remoteUserCursors = {};
+    
+    // Local cursor elements and state
+    let localCursorElement = null;
+    let localCursorNameElement = null;
+    let typingTimeout = null;
+    let isTyping = false;
+
+    // Create local cursor element
+    function createLocalCursor() {
+        if (!localCursorElement) {
+            localCursorElement = document.createElement('div');
+            localCursorElement.classList.add('remote-cursor', 'local-cursor');
+            localCursorNameElement = document.createElement('span');
+            localCursorNameElement.classList.add('remote-cursor-name');
+            localCursorNameElement.textContent = currentUserName + ' (You)';
+            localCursorElement.appendChild(localCursorNameElement);
+            localCursorElement.style.opacity = '0'; // Start hidden
+        }
+    }
+
+    // Update local cursor position
+    function updateLocalCursor() {
+        if (!localCursorElement || !currentUserColor || document.activeElement !== editor) {
+            if (localCursorElement) {
+                localCursorElement.style.opacity = '0';
+            }
+            return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+
+        if (!editor.contains(range.startContainer)) return;
+
+        // Position the cursor
+        const tempRange = document.createRange();
+        try {
+            tempRange.setStart(range.startContainer, range.startOffset);
+            tempRange.collapse(true);
+            
+            const rect = tempRange.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+
+            localCursorElement.style.left = `${rect.left - editorRect.left + editor.scrollLeft}px`;
+            localCursorElement.style.top = `${rect.top - editorRect.top + editor.scrollTop}px`;
+            
+            let lineHeight = rect.height;
+            if (!lineHeight || lineHeight < 5) {
+                let parentForStyle = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+                if (!editor.contains(parentForStyle) || !parentForStyle) parentForStyle = editor;
+                lineHeight = parseFloat(getComputedStyle(parentForStyle).lineHeight);
+                if (isNaN(lineHeight) || lineHeight === 0) {
+                    lineHeight = parseFloat(getComputedStyle(parentForStyle).fontSize) * 1.2 || 18;
+                }
+            }
+            if (lineHeight < 10) lineHeight = 18;
+
+            localCursorElement.style.height = `${lineHeight}px`;
+            localCursorElement.style.backgroundColor = currentUserColor;
+            localCursorNameElement.style.backgroundColor = currentUserColor;
+            
+            // Show cursor but control name visibility based on typing
+            localCursorElement.style.opacity = '0.9';
+            localCursorNameElement.style.opacity = isTyping ? '0' : '1';
+            
+            // Ensure cursor is in editor
+            if (!editor.contains(localCursorElement)) {
+                editor.appendChild(localCursorElement);
+            }
+        } catch(e) {
+            localCursorElement.style.opacity = '0';
+        }
+    }
+
+    // Handle typing state
+    function handleTypingStart() {
+        isTyping = true;
+        if (localCursorNameElement) {
+            localCursorNameElement.style.transition = 'opacity 0.2s';
+            localCursorNameElement.style.opacity = '0';
+        }
+        
+        // Clear existing timeout
+        if (typingTimeout) {
+            clearTimeout(typingTimeout);
+        }
+        
+        // Set new timeout to show name tag after stopping typing
+        typingTimeout = setTimeout(() => {
+            isTyping = false;
+            if (localCursorNameElement && document.activeElement === editor) {
+                localCursorNameElement.style.opacity = '1';
+            }
+        }, 1000); // Show name tag 1 second after stopping typing
+    }
+
+    // Update local cursor name
+    function updateLocalCursorName() {
+        if (localCursorNameElement) {
+            localCursorNameElement.textContent = currentUserName + ' (You)';
+        }
+    }
 
     if (toolbar) {
         const toolbarButtons = toolbar.querySelectorAll('button[data-command]');
@@ -145,6 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clearAllRemoteCursors();
         currentSessionId = sessionId.toUpperCase(); 
         currentUserName = userName;
+        updateLocalCursorName(); // Update local cursor name when connecting
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws?session=${currentSessionId}&name=${encodeURIComponent(currentUserName)}&userId=${currentUserId}`;
@@ -200,12 +304,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'self_info':
                     if (message.payload && message.payload.color) {
                         currentUserColor = message.payload.color;
+                        console.log('Received self info - color:', currentUserColor); // Debug log
+                        createLocalCursor(); // Create local cursor when we get our color
+                        updateLocalCursor(); // Update it immediately
                     }
                     break;
                 case 'remote_cursor_update':
                     if (message.payload) {
                         const data = message.payload; 
                         if (data.userId === currentUserId) return; 
+                        console.log('Received remote cursor update:', data); // Debug log
                         renderRemoteCursor(data);
                     }
                     break;
@@ -227,6 +335,15 @@ document.addEventListener('DOMContentLoaded', function() {
             updateConnectionStatus(false);
             currentSessionId = null;
             clearAllRemoteCursors();
+            // Hide local cursor on disconnect
+            if (localCursorElement) {
+                localCursorElement.style.opacity = '0';
+            }
+            // Clear typing timeout
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+                isTyping = false;
+            }
         };
 
         ws.onerror = function(error) {
@@ -234,6 +351,15 @@ document.addEventListener('DOMContentLoaded', function() {
             updateConnectionStatus(false);
             currentSessionId = null;
             clearAllRemoteCursors();
+            // Hide local cursor on error
+            if (localCursorElement) {
+                localCursorElement.style.opacity = '0';
+            }
+            // Clear typing timeout
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+                isTyping = false;
+            }
             alert('WebSocket connection error. Please check console.');
         };
     }
@@ -299,8 +425,16 @@ document.addEventListener('DOMContentLoaded', function() {
     function handleLocalContentChange() {
         if (applyingRemoteUpdate) return;
         updateWordCount();
-        sendWebSocketMessage('content_update', { content: editor.innerHTML });
-        handleLocalSelectionChange(); 
+        
+        // Clone editor content and remove cursor elements before sending
+        const editorClone = editor.cloneNode(true);
+        const cursors = editorClone.querySelectorAll('.remote-cursor');
+        cursors.forEach(cursor => cursor.remove());
+        
+        sendWebSocketMessage('content_update', { content: editorClone.innerHTML });
+        handleLocalSelectionChange();
+        handleTypingStart(); // Mark as typing
+        updateLocalCursor(); // Update local cursor position
     }
 
     editor.addEventListener('input', handleLocalContentChange);
@@ -313,6 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (applyingRemoteUpdate) return;
                 handleLocalSelectionChange();
                 updateAllToolbarStates();
+                updateLocalCursor(); // Update local cursor on selection change
             }, 150); 
         }
     });
@@ -321,6 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (applyingRemoteUpdate) return;
         handleLocalSelectionChange();
         updateAllToolbarStates();
+        updateLocalCursor(); // Show local cursor on focus
     });
 
     editor.addEventListener('blur', () => {
@@ -333,6 +469,10 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             sendWebSocketMessage('cursor_update', payload);
          }
+         // Hide local cursor on blur
+         if (localCursorElement) {
+             localCursorElement.style.opacity = '0';
+         }
     });
     
     function getCharOffsetFromNode(rootNode, targetNode, offsetInNode) {
@@ -342,7 +482,25 @@ document.addEventListener('DOMContentLoaded', function() {
              return -1; // Cannot find offset
         }
 
-        const treeWalker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, null, false);
+        const treeWalker = document.createTreeWalker(
+            rootNode, 
+            NodeFilter.SHOW_TEXT, 
+            {
+                acceptNode: function(node) {
+                    // Skip text nodes inside cursor elements
+                    let parent = node.parentNode;
+                    while (parent && parent !== rootNode) {
+                        if (parent.classList && (parent.classList.contains('remote-cursor') || parent.classList.contains('local-cursor'))) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        parent = parent.parentNode;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }, 
+            false
+        );
+        
         let currentNode;
         while (currentNode = treeWalker.nextNode()) {
             if (currentNode === targetNode) {
@@ -355,14 +513,38 @@ document.addEventListener('DOMContentLoaded', function() {
         if(rootNode === targetNode) { // Selection is on the editor div itself
             let tempOffset = 0;
             for(let i=0; i < offsetInNode; i++){
-                if(rootNode.childNodes[i] && rootNode.childNodes[i].nodeType === Node.TEXT_NODE){
-                    tempOffset += rootNode.childNodes[i].textContent.length;
-                } else if (rootNode.childNodes[i] && rootNode.childNodes[i].nodeType === Node.ELEMENT_NODE){
+                const childNode = rootNode.childNodes[i];
+                if (!childNode) continue;
+                
+                // Skip cursor elements
+                if (childNode.nodeType === Node.ELEMENT_NODE && 
+                    childNode.classList && 
+                    (childNode.classList.contains('remote-cursor') || childNode.classList.contains('local-cursor'))) {
+                    continue;
+                }
+                
+                if(childNode.nodeType === Node.TEXT_NODE){
+                    tempOffset += childNode.textContent.length;
+                } else if (childNode.nodeType === Node.ELEMENT_NODE){
                     // This case needs full textContent length of the element.
-                    // Simplification: assume offsetInNode for element is index based.
-                    // This part is still complex for accurate char offset if selection is on element.
-                    // For now, this will likely be less accurate if selection is not on text node.
-                    const elWalker = document.createTreeWalker(rootNode.childNodes[i], NodeFilter.SHOW_TEXT, null, false);
+                    const elWalker = document.createTreeWalker(
+                        childNode, 
+                        NodeFilter.SHOW_TEXT,
+                        {
+                            acceptNode: function(node) {
+                                // Skip text nodes inside cursor elements
+                                let parent = node.parentNode;
+                                while (parent && parent !== childNode) {
+                                    if (parent.classList && (parent.classList.contains('remote-cursor') || parent.classList.contains('local-cursor'))) {
+                                        return NodeFilter.FILTER_REJECT;
+                                    }
+                                    parent = parent.parentNode;
+                                }
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        },
+                        false
+                    );
                     let elNode;
                     while(elNode = elWalker.nextNode()) {tempOffset += elNode.textContent.length;}
                 }
@@ -387,18 +569,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (charOffset !== -1) {
             const payload = {
+                userId: currentUserId,
+                userName: currentUserName,
+                color: currentUserColor,
                 rangeData: { 
                     charOffset: charOffset, 
                     isCollapsed: range.collapsed 
                 }
             };
+            console.log('Sending cursor update:', payload); // Debug log
             sendWebSocketMessage('cursor_update', payload);
         }
     }
     
     function findDomPositionFromCharOffset(rootNode, targetCharOffset) {
         let accumulatedCharCount = 0;
-        const treeWalker = document.createTreeWalker(rootNode, NodeFilter.SHOW_TEXT, null, false);
+        const treeWalker = document.createTreeWalker(
+            rootNode, 
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // Skip text nodes inside cursor elements
+                    let parent = node.parentNode;
+                    while (parent && parent !== rootNode) {
+                        if (parent.classList && (parent.classList.contains('remote-cursor') || parent.classList.contains('local-cursor'))) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        parent = parent.parentNode;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            },
+            false
+        );
         let currentNode;
 
         while (currentNode = treeWalker.nextNode()) {
@@ -409,10 +612,29 @@ document.addEventListener('DOMContentLoaded', function() {
             accumulatedCharCount += nodeLength;
         }
         
-        treeWalker.currentNode = rootNode; 
+        // Reset walker to find last text node
+        const lastTextWalker = document.createTreeWalker(
+            rootNode, 
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // Skip text nodes inside cursor elements
+                    let parent = node.parentNode;
+                    while (parent && parent !== rootNode) {
+                        if (parent.classList && (parent.classList.contains('remote-cursor') || parent.classList.contains('local-cursor'))) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        parent = parent.parentNode;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            },
+            false
+        );
+        
         let lastTextNode = null;
         let tempNode;
-        while(tempNode = treeWalker.nextNode()) { lastTextNode = tempNode; }
+        while(tempNode = lastTextWalker.nextNode()) { lastTextNode = tempNode; }
 
         if (lastTextNode) {
             return { node: lastTextNode, offset: lastTextNode.textContent.length };
@@ -422,6 +644,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderRemoteCursor(data) {
         const { userId, userName, color, rangeData } = data;
+        console.log('renderRemoteCursor called with:', { userId, userName, color, rangeData }); // Debug
 
         if (editor.style.position !== 'relative' && editor.style.position !== 'absolute' && editor.style.position !== 'fixed') {
             editor.style.position = 'relative';
@@ -429,6 +652,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let userState = remoteUserCursors[userId];
         if (!userState) {
+            console.log('Creating new cursor for user:', userId); // Debug
             userState = {
                 name: userName,
                 color: color || '#888888',
@@ -439,26 +663,46 @@ document.addEventListener('DOMContentLoaded', function() {
             userState.nameLabelElement.classList.add('remote-cursor-name');
             userState.nameLabelElement.textContent = userName;
             userState.cursorElement.appendChild(userState.nameLabelElement);
+            // Ensure cursor has proper initial styles
+            userState.cursorElement.style.position = 'absolute';
+            userState.cursorElement.style.width = '2px';
+            userState.cursorElement.style.opacity = '0.9';
+            userState.cursorElement.style.pointerEvents = 'none';
+            userState.cursorElement.style.zIndex = '5';
             editor.appendChild(userState.cursorElement);
             remoteUserCursors[userId] = userState;
+            console.log('Created cursor element:', userState.cursorElement); // Debug
         } 
         
         userState.cursorElement.style.backgroundColor = userState.color; 
         userState.nameLabelElement.style.backgroundColor = userState.color;
+        
+        // Update color if it changed
+        if (color && color !== userState.color) {
+            userState.color = color;
+            userState.cursorElement.style.backgroundColor = color;
+            userState.nameLabelElement.style.backgroundColor = color;
+        }
+        
         if (userState.name !== userName) {
             userState.name = userName;
             userState.nameLabelElement.textContent = userName;
         }
         
-        if (rangeData && typeof rangeData.charOffset === 'number' && rangeData.charOffset === -1 && rangeData.isCollapsed) {
+        // Special case: user left the editor (sent -1 as charOffset)
+        if (rangeData && typeof rangeData.charOffset === 'number' && rangeData.charOffset === -1) {
+            console.log('Hiding cursor - user left editor'); // Debug
             userState.cursorElement.style.display = 'none'; 
             return;
         }
 
-        if (rangeData && typeof rangeData.charOffset === 'number' && rangeData.isCollapsed) {
+        // Always show cursor if we have valid position data
+        if (rangeData && typeof rangeData.charOffset === 'number' && rangeData.charOffset >= 0) {
+            console.log('Finding position for charOffset:', rangeData.charOffset); // Debug
             const { node, offset } = findDomPositionFromCharOffset(editor, rangeData.charOffset);
 
             if (node) {
+                console.log('Found node:', node, 'offset:', offset); // Debug
                 const tempRange = document.createRange();
                 try {
                     const maxOffset = node.nodeType === Node.TEXT_NODE ? node.textContent.length : node.childNodes.length;
@@ -470,8 +714,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const rect = tempRange.getBoundingClientRect();
                     const editorRect = editor.getBoundingClientRect();
 
-                    userState.cursorElement.style.left = `${rect.left - editorRect.left + editor.scrollLeft}px`;
-                    userState.cursorElement.style.top = `${rect.top - editorRect.top + editor.scrollTop}px`;
+                    const left = rect.left - editorRect.left + editor.scrollLeft;
+                    const top = rect.top - editorRect.top + editor.scrollTop;
+                    console.log('Positioning cursor at:', { left, top }); // Debug
+
+                    userState.cursorElement.style.left = `${left}px`;
+                    userState.cursorElement.style.top = `${top}px`;
                     let lineHeight = rect.height; 
                     if (!lineHeight || lineHeight < 5) { 
                         let parentForStyle = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
@@ -483,17 +731,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (lineHeight < 10) lineHeight = 18; 
 
-
                     userState.cursorElement.style.height = `${lineHeight}px`;
-                    userState.cursorElement.style.display = 'block'; 
+                    userState.cursorElement.style.display = 'block';
+                    console.log('Cursor should be visible now'); // Debug
                 } catch(e) {
+                    console.error('Error positioning cursor:', e);
                     userState.cursorElement.style.display = 'none'; 
                 }
             } else {
-                 userState.cursorElement.style.display = 'none'; 
+                console.log('Could not find node for position'); // Debug
+                userState.cursorElement.style.display = 'none'; 
             }
         } else {
-            userState.cursorElement.style.display = 'none';
+            console.log('No valid rangeData'); // Debug
         }
     }
 
@@ -565,7 +815,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateWordCount() {
-        const text = editor.innerText; 
+        // Clone editor and remove cursor elements to get accurate word count
+        const editorClone = editor.cloneNode(true);
+        const cursors = editorClone.querySelectorAll('.remote-cursor');
+        cursors.forEach(cursor => cursor.remove());
+        
+        const text = editorClone.innerText; 
         const words = text.trim() ? text.trim().split(/\s+/).length : 0;
         wordCount.textContent = `${words} word${words !== 1 ? 's' : ''}`;
     }
@@ -664,7 +919,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const range = document.createRange();
         let lastMeaningfulNode = editor.lastChild;
-        while(lastMeaningfulNode && (lastMeaningfulNode.nodeType !== Node.ELEMENT_NODE && lastMeaningfulNode.nodeType !== Node.TEXT_NODE || (lastMeaningfulNode.classList && (lastMeaningfulNode.classList.contains('remote-cursor') || lastMeaningfulNode.classList.contains('cursor')) ))) {
+        while(lastMeaningfulNode && (lastMeaningfulNode.nodeType !== Node.ELEMENT_NODE && lastMeaningfulNode.nodeType !== Node.TEXT_NODE || (lastMeaningfulNode.classList && (lastMeaningfulNode.classList.contains('remote-cursor') || lastMeaningfulNode.classList.contains('local-cursor'))))) {
             lastMeaningfulNode = lastMeaningfulNode.previousSibling;
         }
 

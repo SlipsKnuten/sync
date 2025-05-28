@@ -104,9 +104,42 @@ func (h *Hub) Run() {
 						shouldSend = false
 					} else {
 						// Transform to remote_cursor_update for other clients
+						// Extract the rangeData from the payload
+						var cursorPayload map[string]interface{}
+						if payload, ok := message.Payload.(map[string]interface{}); ok {
+							cursorPayload = payload
+						}
+						
+						// Create a complete remote cursor payload
+						color := ""
+						var rangeData interface{}
+						if cursorPayload != nil {
+							if colorStr, ok := cursorPayload["color"].(string); ok {
+								color = colorStr
+							}
+							rangeData = cursorPayload["rangeData"]
+						}
+						
+						// Get color from the client if not in payload
+						if color == "" {
+							for client := range session.clients {
+								if client.userID == message.UserID {
+									color = client.color
+									break
+								}
+							}
+						}
+						
+						log.Printf("Transforming cursor_update from %s to remote_cursor_update with color %s", message.UserID, color)
+						
 						finalMessage = Message{
-							Type:      "remote_cursor_update",
-							Payload:   message.Payload, // Payload already contains sender's ID, Name, Color, RangeData
+							Type: "remote_cursor_update",
+							Payload: map[string]interface{}{
+								"userId":    message.UserID,
+								"userName":  message.UserName,
+								"color":     color,
+								"rangeData": rangeData,
+							},
 							SessionID: message.SessionID,
 						}
 					}

@@ -23,7 +23,7 @@ func NewSession(id string) *Session {
 	return &Session{
 		ID:      id,
 		clients: make(map[*Client]bool),
-		Content: "<p>Welcome to DocCollab! Start typing...</p><div class=\"cursor\"></div>", 
+		Content: "<p>Welcome to DocCollab! Start typing...</p>", 
 	}
 }
 
