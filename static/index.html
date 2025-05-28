@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync - Minimal Collaborative Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="min-h-screen flex flex-col">
+    <header class="bg-[#2a2a2a] border-b border-[#3a3a3a] py-3 px-4">
+        <div class="header-content flex items-center justify-between">
+            <h1 class="text-xl font-bold">Sync</h1>
+            
+            <div class="session-info flex items-center space-x-4">
+                <div class="relative">
+                    <button id="sessionBtn" class="btn-secondary px-3 py-1 rounded text-sm flex items-center">
+                        <span id="sessionCode">Not connected</span>
+                    </button>
+                </div>
+                
+                <button id="usersBtn" class="btn-secondary w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fas fa-users"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <div id="toolbar" class="bg-[#303030] p-2 flex items-center space-x-2 border-b border-[#3a3a3a] sticky top-0 z-10 flex-wrap"> <!-- Added flex-wrap -->
+        <button data-command="bold" class="toolbar-btn"><i class="fas fa-bold"></i></button>
+        <button data-command="italic" class="toolbar-btn"><i class="fas fa-italic"></i></button>
+        <button data-command="underline" class="toolbar-btn"><i class="fas fa-underline"></i></button>
+        
+        <span class="toolbar-separator"></span>
+
+        <button data-command="insertUnorderedList" class="toolbar-btn"><i class="fas fa-list-ul"></i></button>
+        <button data-command="insertOrderedList" class="toolbar-btn"><i class="fas fa-list-ol"></i></button>
+
+        <span class="toolbar-separator"></span>
+
+        <select data-command="formatBlock" class="toolbar-select">
+            <option value="P">Paragraph</option>
+            <option value="H1">Heading 1</option>
+            <option value="H2">Heading 2</option>
+            <option value="H3">Heading 3</option>
+        </select>
+
+        <span class="toolbar-separator"></span> 
+
+        <select id="fontSizeSelect" class="toolbar-select">
+            <option value="">Font Size</option> 
+            <option value="1">X-Small (1)</option>
+            <option value="2">Small (2)</option>
+            <option value="3">Medium (3)</option>
+            <option value="4">Large (4)</option>
+            <option value="5">X-Large (5)</option>
+            <option value="6">XX-Large (6)</option>
+            <option value="7">Huge (7)</option>
+        </select>
+    </div>
+
+    <div class="editor-container p-4 md:p-8 flex-grow flex justify-center"> 
+        <div class="editor bg-[#2a2a2a] p-6 md:p-8 w-full max-w-4xl shadow-lg" id="editor" contenteditable="true" spellcheck="true">
+        </div>
+    </div>
+    
+    <footer class="bg-[#2a2a2a] border-t border-[#3a3a3a] py-2 px-4 flex items-center justify-between text-xs">
+        <div class="flex items-center">
+            <span id="wordCount">0 words</span>
+        </div>
+        <div>
+            <span id="connectionStatus" class="flex items-center">
+                <span class="status-dot w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                <span class="status-text">Offline</span>
+            </span>
+        </div>
+    </footer>
+
+    <div id="sessionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="modal-content bg-[#2a2a2a] rounded-lg p-6 w-full max-w-md border border-[#3a3a3a]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Start or Join Session</h3>
+                <button id="closeSessionModal" class="text-[#888] hover:text-[#e2b714]">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm mb-2">Your Name</label>
+                <input type="text" id="userName" class="w-full bg-[#3a3a3a] border border-[#4a4a4a] rounded px-3 py-2 focus:outline-none focus:border-[#e2b714]" placeholder="Anonymous">
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm mb-2">Session Code (leave empty to create new)</label>
+                <input type="text" id="sessionCodeInput" class="w-full bg-[#3a3a3a] border border-[#4a4a4a] rounded px-3 py-2 focus:outline-none focus:border-[#e2b714]" placeholder="e.g. ABC123">
+            </div>
+            
+            <div class="flex space-x-3">
+                <button id="joinSessionBtn" class="btn-primary flex-1 py-2 rounded">
+                    <i class="fas fa-sign-in-alt mr-2"></i> Join
+                </button>
+                <button id="newSessionBtn" class="btn-secondary flex-1 py-2 rounded">
+                    <i class="fas fa-plus mr-2"></i> New
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="usersModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="modal-content bg-[#2a2a2a] rounded-lg p-6 w-full max-w-md border border-[#3a3a3a]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Connected Users</h3>
+                <button id="closeUsersModal" class="text-[#888] hover:text-[#e2b714]">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div id="usersList" class="space-y-2 max-h-60 overflow-y-auto">
+                <div class="flex items-center justify-between bg-[#3a3a3a] p-3 rounded">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full bg-[#e2b714] mr-2"></div>
+                        <span>You</span>
+                    </div>
+                    <span class="text-xs text-[#888]">Owner</span>
+                </div>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-[#3a3a3a]">
+                <button id="copyInviteLink" class="btn-secondary w-full py-2 rounded flex items-center justify-center">
+                    <i class="fas fa-link mr-2"></i> Copy Invite Link
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap');
+
+body {
+    font-family: 'Roboto Mono', monospace;
+    background-color: #2a2a2a;
+    color: #e2b714;
+    min-height: 100vh;
+    margin: 0; 
+    display: flex; 
+    flex-direction: column;
+}
+
+
+
+.toolbar-btn {
+    background-color: #4a4a4a; 
+    color: #e2b714; 
+    border: 1px solid #5a5a5a;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 1em; 
+}
+
+.toolbar-btn:hover {
+    background-color: #5a5a5a;
+}
+
+.toolbar-btn.active { 
+    background-color: #e2b714;
+    color: #2a2a2a;
+}
+
+.toolbar-separator {
+    display: inline-block;
+    width: 1px;
+    height: 20px; 
+    background-color: #5a5a5a;
+    margin: 0 8px;
+}
+
+.toolbar-select {
+    background-color: #4a4a4a;
+    color: #e2b714;
+    border: 1px solid #5a5a5a;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    font-family: 'Roboto Mono', monospace; 
+}
+
+.toolbar-select option {
+    background-color: #4a4a4a;
+    color: #e2b714;
+}
+
+
+.editor-container {
+    background-color: #202020; 
+}
+
+.editor { 
+    border: 1px solid #3a3a3a;
+    box-sizing: border-box; 
+}
+
+#editor:focus {
+    outline: 2px solid #e2b714; 
+}
+
+.editor h1 {
+    font-size: 2em;
+    font-weight: bold;
+    color: #e2b714; 
+    margin-top: 0.67em;
+    margin-bottom: 0.3em;
+    line-height: 1.2;
+}
+
+.editor h2 {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #e2b714;
+    margin-top: 0.83em;
+    margin-bottom: 0.3em;
+    line-height: 1.2;
+}
+
+.editor h3 {
+    font-size: 1.17em;
+    font-weight: bold;
+    color: #e2b714;
+    margin-top: 1em;
+    margin-bottom: 0.3em;
+    line-height: 1.2;
+}
+
+.editor ul, .editor ol {
+    margin-left: 40px; 
+    margin-bottom: 1em;
+}
+
+.editor li {
+    margin-bottom: 0.25em;
+}
+
+
+.editor {
+    min-height: calc(100vh - 100px);
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    caret-color: #e2b714;
+    outline: none; 
+    white-space: pre-wrap; 
+    word-wrap: break-word; 
+}
+
+.cursor {
+    display: inline;
+    position: relative; 
+}
+
+.cursor::after {
+    content: '';
+    position: absolute;
+    width: 2px; 
+    height: 1.2em; 
+    background: #e2b714;
+    display: inline-block; 
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+    bottom: 2px; 
+}
+
+@keyframes blink {
+    from, to { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.btn-primary {
+    background-color: #e2b714;
+    color: #2a2a2a;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: #d1a710;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: #3a3a3a;
+    color: #e2b714;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background-color: #4a4a4a;
+    transform: translateY(-1px); 
+}
+
+@media (max-width: 640px) {
+    .editor {
+        min-height: calc(100vh - 80px); 
+        padding: 10px; 
+        font-size: 14px; 
+    }
+    
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px; 
+    }
+    
+    .session-info {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    #sessionModal { 
+        padding: 10px; 
+    }
+    
+    .modal-content { 
+        width: 95%; 
+    }
+}
+
+html {
+    height: 100%; 
+}
+
+.editor p {
+    margin-bottom: 0.5em;
+}
+
+.editor p:last-child {
+    margin-bottom: 0;
+}
+
+
+
+#editor {
+    position: relative; /* Crucial for positioning remote cursors */
+    /* ... other editor styles ... */
+}
+
+.remote-cursor {
+    position: absolute; 
+    width: 2px;
+    /* height will be set by JS */
+    opacity: 0.9;
+    z-index: 5; /* Ensure it's above text but potentially below local caret/UI elements */
+    pointer-events: none; /* So it doesn't interfere with clicks or selection */
+}
+
+.remote-cursor-name {
+    position: absolute;
+    bottom: 100%; /* Positions the top of the name label at the top of the cursor bar */
+    left: -3px;  /* Adjust for horizontal alignment relative to the bar */
+    transform: translateY(-2px); /* Adds a small gap above the cursor bar */
+    font-size: 0.7em; /* Smaller font for the name tag */
+    color: white; /* Text color for the name */
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap; /* Prevent name from wrapping */
+    /* background-color will be set by JS to match user's cursor color */
+    z-index: 6; /* Above the cursor bar itself */
+}
